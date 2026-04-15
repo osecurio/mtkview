@@ -46,7 +46,10 @@ pub extern "C" fn CorePluginInit() -> bool {
     settings.register_group("mtkldr", "MTK Loader");
     //settings.register_setting_json("mtkldr", )
 
-    register_view_type("mtkview", "MTK", mtk_loaders::preloader::view::MTKLoaderBinaryViewType::new);
+    register_view_type("mtkview_pl", "MTK Preloader", mtk_loaders::preloader::view::MTKPreloaderBinaryViewType::new);
+
+    register_view_type("mtkview_lk", "MTK Little Kernel", mtk_loaders::lk::view::MTKLittleKernelBinaryViewType::new);
+
 
     register_command(
         "mtkview\\Print Load Information",

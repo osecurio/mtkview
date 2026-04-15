@@ -20,23 +20,23 @@ use tracing::{debug, info, warn};
 
 
 
-pub struct MTKPreloaderBinaryViewType {
+pub struct MTKLittleKernelBinaryViewType {
     view_type: BinaryViewType,
 }
 
-impl MTKPreloaderBinaryViewType {
+impl MTKLittleKernelBinaryViewType {
     pub fn new(view_type: BinaryViewType) -> Self {
         Self { view_type }
     }
 }
 
-impl AsRef<BinaryViewType> for MTKPreloaderBinaryViewType {
+impl AsRef<BinaryViewType> for MTKLittleKernelBinaryViewType {
     fn as_ref(&self) -> &BinaryViewType {
         &self.view_type
     }
 }
 
-impl BinaryViewTypeBase for MTKPreloaderBinaryViewType {
+impl BinaryViewTypeBase for MTKLittleKernelBinaryViewType {
     fn is_deprecated(&self) -> bool {
         false
     }
@@ -44,6 +44,7 @@ impl BinaryViewTypeBase for MTKPreloaderBinaryViewType {
         false
     }
     fn is_valid_for(&self, data: &BinaryView) -> bool {
+        return false;
         let mut magic = Vec::<u8>::new();
 
         let magic_b64 = BASE64_STANDARD.encode(MTKPL_MAGIC);
@@ -68,14 +69,14 @@ impl BinaryViewTypeBase for MTKPreloaderBinaryViewType {
     }
 }
 
-impl CustomBinaryViewType for MTKPreloaderBinaryViewType {
+impl CustomBinaryViewType for MTKLittleKernelBinaryViewType {
     fn create_custom_view<'builder>(
         &self,
         data: &BinaryView,
         builder: binaryninja::custom_binary_view::CustomViewBuilder<'builder, Self>,
     ) -> binaryninja::binary_view::Result<binaryninja::custom_binary_view::CustomView<'builder>>
     {
-        debug!("Creating MTKLoaderBinaryView from MTKPreloaderBinaryViewType");
+        debug!("Creating MTKLoaderBinaryView from MTKLittleKernelBinaryViewType");
 
         let bv = builder.create::<MTKLoaderBinaryView>(data, ());
         bv
