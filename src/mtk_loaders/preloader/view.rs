@@ -98,7 +98,7 @@ unsafe impl CustomBinaryView for MTKPreloaderBinaryView {
 
 pub struct MTKPreloaderBinaryView {
     inner: binaryninja::rc::Ref<BinaryView>,
-    mtk_br_loader: MTKPreloaderLoader,
+    mtk_pl_loader: MTKPreloaderLoader,
 }
 
 impl BinaryViewBase for MTKPreloaderBinaryView {
@@ -121,10 +121,10 @@ impl MTKPreloaderBinaryView {
         let read_buffer = parent_view
             .read_buffer(0, parent_view.len() as usize)
             .ok_or(())?;
-        let mtk_br_loader = MTKPreloaderLoader::new(read_buffer)?;
+        let mtk_pl_loader = MTKPreloaderLoader::new(read_buffer)?;
         Ok(Self {
             inner: view.to_owned(),
-            mtk_br_loader,
+            mtk_pl_loader,
         })
     }
 
@@ -148,9 +148,9 @@ impl MTKPreloaderBinaryView {
         self.set_default_arch(&default_arch);
         self.set_default_platform(&default_platform);
 
-        info!("{}", self.mtk_br_loader);
+        info!("{}", self.mtk_pl_loader);
 
-        for (_name, segment) in self.mtk_br_loader.get_segments() {
+        for (_name, segment) in self.mtk_pl_loader.get_segments() {
             let new_segment = Segment::builder(segment.mapped_addr_range.clone())
                 .parent_backing(segment.file_backing.clone())
                 .is_auto(true)
@@ -159,7 +159,7 @@ impl MTKPreloaderBinaryView {
             self.add_segment(new_segment);
         }
 
-        for (name, section) in self.mtk_br_loader.get_sections() {
+        for (name, section) in self.mtk_pl_loader.get_sections() {
             let mut new_section = Section::builder(
                 section.name.clone(),
                 Range {
@@ -189,7 +189,7 @@ impl MTKPreloaderBinaryView {
         // Define User Header Types (MOVE THIS CODE INTO THE SPECIFIC MTK HEADER PARSERS)
         let pt_clone = parsed_types.types.clone();
         for pt in parsed_types.types {
-            let Some(type_offset) = self.mtk_br_loader.get_type_addr(&pt.name.to_string()) else {
+            let Some(type_offset) = self.mtk_pl_loader.get_type_addr(&pt.name.to_string()) else {
                 continue;
             };
 
@@ -206,7 +206,7 @@ impl MTKPreloaderBinaryView {
             let sym = Symbol::builder(
                 SymbolType::Data,
                 &name,
-                self.mtk_br_loader.get_image_load_addr() as u64 + type_offset as u64,
+                self.mtk_pl_loader.get_image_load_addr() as u64 + type_offset as u64,
             )
             .create();
             self.define_auto_symbol_with_type(&sym, &entry_forced_platform, Some(&*pt.ty))
@@ -218,7 +218,7 @@ impl MTKPreloaderBinaryView {
             let sym = Symbol::builder(
                 SymbolType::Data,
                 &name,
-                self.mtk_br_loader.get_image_load_addr() as u64 + type_offset as u64,
+                self.mtk_pl_loader.get_image_load_addr() as u64 + type_offset as u64,
             )
             .create();
 
@@ -266,7 +266,7 @@ impl MTKPreloaderBinaryView {
     */
 
     fn get_entry_point(&self) -> u64 {
-        self.mtk_br_loader.get_entry_point()
+        self.mtk_pl_loader.get_entry_point()
     }
 }
 

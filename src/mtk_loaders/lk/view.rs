@@ -1,8 +1,8 @@
+use crate::mtk_loaders::lk::MTKLkLoader;
+use crate::mtk_loaders::lk::lk_types::LK_TYPES_C_SRC;
 use crate::{
     BinaryViewResult,
-    mtk_loaders::lk::lk_headers::{
-        MTKLK_HEADER_DEFAULT_LEN, MTKLK_MAGIC, MtkLkHeader, lk_types::LK_TYPES_C_SRC,
-    },
+    mtk_loaders::lk::lk_headers::{MTKLK_HEADER_DEFAULT_LEN, MTKLK_MAGIC, MtkLkHeader},
 };
 use base64::prelude::*;
 use binaryninja::{
@@ -112,7 +112,7 @@ impl MTKLkBinaryView {
         let read_buffer = parent_view
             .read_buffer(0, parent_view.len() as usize)
             .ok_or(())?;
-        let mtk_lk_loader = MTKLkLoader::new(read_buffer)?;
+        let mtk_lk_loader = MTKLkLoader::new(read_buffer.get_data())?;
         Ok(Self {
             inner: view.to_owned(),
             mtk_lk_loader,

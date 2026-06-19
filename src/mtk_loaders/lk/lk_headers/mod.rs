@@ -1,4 +1,4 @@
-use crate::util::{read_data_slice_n, read_data_slice_u32};
+use crate::util::{find_magic_first, read_data_slice_n, read_data_slice_u32};
 
 pub const MTKLK_MAGIC: &'static [u8; 0x4] = b"\x88\x16\x88\x58";
 pub const MTKLK_MAGIC_INT: u32 = 0x58881688;
@@ -10,7 +10,7 @@ pub const MTKLK_HEADER_DEFAULT_LEN: usize = 0x200;
  *
  */
 
-pub struct Md1RomExt {
+pub struct MdHeaderExt {
     magic2: u32,
     offset: u32,
 }
@@ -22,12 +22,18 @@ pub(crate) struct MtkLkHeader {
     loadaddr: u32,
     mode: u32,
     // Optional rest of struct
-    md1_ext: Option<Md1RomExt>,
+    md1_ext: Option<MdHeaderExt>,
 }
 
 impl MtkLkHeader {
     pub fn load(data: &[u8]) -> Option<Self> {
         let mut offset = 0;
+
+        // Magic search
+        let Some(magic_offset) = find_magic_first(data, MTKLK_MAGIC) else {
+            return None;
+        };
+        offset = magic_offset;
 
         let magic = {
             let m = read_data_slice_u32(data, offset).unwrap();
@@ -55,7 +61,7 @@ impl MtkLkHeader {
             }
             let data_offset = read_data_slice_u32(data, offset).unwrap();
 
-            Some(Md1RomExt {
+            Some(MdHeaderExt {
                 magic2: m2,
                 offset: data_offset,
             })
@@ -69,5 +75,24 @@ impl MtkLkHeader {
             mode,
             md1_ext,
         })
+    }
+
+    pub fn get_full_size(&self) -> u64 {
+        self.size as u64
+    }
+
+    pub fn is_md_ext(&self) -> bool {
+        self.md1_ext.is_some()
+    }
+
+    pub fn get_name_root(&self) -> String {
+        if let Ok(s) = str::from_utf8(&self.name) {
+            return s.to_string();
+        }
+        let mut hs = String::from("seg_");
+        for b in self.name {
+            hs.push_str(format!("{:02x}", b).as_str());
+        }
+        hs
     }
 }

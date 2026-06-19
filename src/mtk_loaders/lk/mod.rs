@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{collections::HashMap, ops::Range};
 
 use binaryninja::{
     binary_view::{BinaryViewEventHandler, BinaryViewExt},
@@ -7,27 +7,99 @@ use binaryninja::{
 };
 use tracing::{debug, info, warn};
 
-use crate::{BinaryViewResult, util::read_data_slice_u32};
+use crate::{
+    BinaryViewResult, mtk_loaders::lk::lk_headers::MtkLkHeader, util::read_data_slice_u32,
+};
 
-//pub(crate) mod lk_headers;
-//pub(crate) mod lk_types;
-//pub(crate) mod view;
+pub(crate) mod lk_headers;
+pub(crate) mod lk_types;
+pub(crate) mod view;
 
-struct RomPairs {
-    header: Vec<u8>,
+struct LkRomData {
+    data_memory_load_address: u64,
     data: Vec<u8>,
 }
 
-pub(crate) struct MTKLkLoader {}
+impl LkRomData {
+    pub fn new(data_slice: &[u8]) -> Self {
+        let data = data_slice.to_vec();
+        let data_memory_load_address = read_data_slice_u32(&data, 0x74).unwrap() as u64;
+
+        Self {
+            data_memory_load_address,
+            data,
+        }
+    }
+}
+
+struct LKRomSection {
+    name_root: String,
+    header: MtkLkHeader,
+    data: LkRomData,
+}
+
+impl LKRomSection {
+    pub fn full_size(&self) -> u64 {
+        self.header.get_full_size()
+    }
+}
+
+pub(crate) struct MTKLkLoader {
+    lk_sections: HashMap<String, LKRomSection>,
+}
 
 impl MTKLkLoader {
-    pub fn new(data: DataBuffer) -> BinaryViewResult<Self> {
-        let image_data = data.get_data();
+    pub fn new(data: &[u8]) -> BinaryViewResult<Self> {
+        let data_full_len = data.len();
+        let mut data_curr_i = 0;
 
+        let mut lk_sections = HashMap::<String, LKRomSection>::new();
+
+        loop {
+            let Some(loaded_lk_header) = MtkLkHeader::load(&data[data_curr_i..]) else {
+                break;
+            };
+            let name_root = loaded_lk_header.get_name_root();
+            let full_size = loaded_lk_header.get_full_size();
+            let loaded_lk_data = LkRomData::new(data);
+
+            let loaded_lk_segment = LKRomSection {
+                name_root: loaded_lk_header.get_name_root(),
+                header: loaded_lk_header,
+                data: loaded_lk_data,
+            };
+
+            lk_sections.insert(name_root, loaded_lk_segment);
+            if (full_size as usize + data_curr_i) as usize == data_full_len {
+                // Loaded all LK's
+                break;
+            } else {
+                data_curr_i += full_size as usize;
+            }
+        }
+
+        if data_curr_i == 0 {
+            // Found no LK magic
+            return Err(());
+        }
+
+        //
         todo!()
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mtk_lk_loader() {
+        let f = include_bytes!("../../../testbins/lk.img");
+        let lk = MTKLkLoader::new(f).unwrap();
+    }
+}
+
+/*
 pub(crate) struct LkMd1RomHookContext {
     entry_point: u32,
     data_base_address: u32,
@@ -98,3 +170,4 @@ impl BinaryViewEventHandler for LkMd1RomHookContext {
         //binary_view.add_section();
     }
 }
+*/
