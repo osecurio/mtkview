@@ -45,16 +45,8 @@ impl BinaryViewTypeBase for MTKLkBinaryViewType {
         false
     }
     fn is_valid_for(&self, data: &BinaryView) -> bool {
-        let mut buf = Vec::<u8>::new();
-
-        let magic_b64 = BASE64_STANDARD.encode(MTKLK_MAGIC);
-        let data_buf = DataBuffer::from_base64(magic_b64.as_str());
-        let Some(offset) = data.find_next_data(0x0, data.end(), &data_buf) else {
-            return false;
-        };
-
-        data.read_into_vec(&mut buf, offset, MTKLK_HEADER_DEFAULT_LEN);
-        match MtkLkHeader::load(&buf) {
+        let rawr = data.read_buffer(0, data.len() as usize).unwrap();
+        match MtkLkHeader::load(rawr.get_data(), false) {
             Some(_) => true,
             None => false,
         }
@@ -141,32 +133,46 @@ impl MTKLkBinaryView {
 
         info!("{}", self.mtk_lk_loader);
 
-        for (_name, segment) in self.mtk_lk_loader.get_segments() {
-            let new_segment = Segment::builder(segment.mapped_addr_range.clone())
-                .parent_backing(segment.file_backing.clone())
-                .is_auto(true)
-                .flags(segment.mapped_segment_flags);
-
-            self.add_segment(new_segment);
-        }
-
         for (name, section) in self.mtk_lk_loader.get_sections() {
-            let mut new_section = Section::builder(
-                section.name.clone(),
-                Range {
-                    start: section.mapped_addr_range.start,
-                    end: section.mapped_addr_range.end,
-                },
+            let segmentized = section.get_segmentized();
+            let header_new_segment = Segment::builder(segmentized.get_header_mapped_addr_range())
+                .parent_backing(segmentized.get_header_file_backing())
+                .is_auto(true)
+                .flags(segmentized.get_header_mapped_seg_flags());
+
+            self.add_segment(header_new_segment);
+
+            let data_new_segment = Segment::builder(segmentized.get_data_mapped_addr_range())
+                .parent_backing(segmentized.get_data_file_backing())
+                .is_auto(true)
+                .flags(segmentized.get_data_mapped_seg_flags());
+
+            self.add_segment(data_new_segment);
+
+            let mut new_header_section = Section::builder(
+                format!("{}_header", name),
+                segmentized.get_header_mapped_addr_range(),
             )
             .is_auto(true);
+            new_header_section =
+                new_header_section.semantics(binaryninja::section::Semantics::ReadOnlyData);
+            println!("Attempting to create section: {:?}", new_header_section);
+            self.add_section(new_header_section);
 
-            if name == ".code.data" {
-                new_section = new_section.semantics(binaryninja::section::Semantics::ReadOnlyCode);
-            }
+            let mut new_data_section = Section::builder(
+                format!("{}_data", name),
+                segmentized.get_data_mapped_addr_range(),
+            )
+            .is_auto(true);
+            new_data_section =
+                new_data_section.semantics(binaryninja::section::Semantics::DefaultSection);
 
-            self.add_section(new_section);
+            println!("Attempting to create section: {:?}", new_data_section);
+
+            self.add_section(new_data_section);
         }
 
+        /*
         // Setup Entry Point
         let entry_forced_platform = Platform::by_name("armv7").ok_or(())?;
         let entry_point = self.get_entry_point();
@@ -215,7 +221,7 @@ impl MTKLkBinaryView {
 
             self.define_auto_symbol_with_type(&sym, &entry_forced_platform, Some(&*pt.ty))
                 .unwrap();
-        }
+        }*/
 
         Ok(())
     }
@@ -257,7 +263,7 @@ impl MTKLkBinaryView {
     */
 
     fn get_entry_point(&self) -> u64 {
-        self.mtk_lk_loader.get_entry_point()
+        0 //self.mtk_lk_loader.get_entry_point()
     }
 }
 

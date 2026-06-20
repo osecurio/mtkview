@@ -1,51 +1,158 @@
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, fmt, ops::Range};
 
 use binaryninja::{
     binary_view::{BinaryViewEventHandler, BinaryViewExt},
     data_buffer::DataBuffer,
     section::SectionBuilder,
+    segment::SegmentFlags,
 };
 use tracing::{debug, info, warn};
 
 use crate::{
-    BinaryViewResult, mtk_loaders::lk::lk_headers::MtkLkHeader, util::read_data_slice_u32,
+    BinaryViewResult,
+    mtk_loaders::lk::lk_headers::{
+        MTKLK_CODE_ENTRY_POINT_OFFSET, MTKLK_CODE_LOAD_ADDR_OFFSET, MtkLkHeader,
+    },
+    util::read_data_slice_u32,
 };
 
 pub(crate) mod lk_headers;
 pub(crate) mod lk_types;
 pub(crate) mod view;
 
+#[derive(Debug, Clone)]
 struct LkRomData {
-    data_memory_load_address: u64,
     data: Vec<u8>,
+    data_memory_load_address: Option<u32>,
+    entrypoint: Option<u32>,
 }
 
 impl LkRomData {
-    pub fn new(data_slice: &[u8]) -> Self {
+    pub fn new(data_slice: &[u8], lk_code: bool) -> Self {
         let data = data_slice.to_vec();
-        let data_memory_load_address = read_data_slice_u32(&data, 0x74).unwrap() as u64;
+        let mut data_memory_load_address = None;
+        let mut entrypoint = None;
+
+        if lk_code {
+            data_memory_load_address = read_data_slice_u32(&data, MTKLK_CODE_LOAD_ADDR_OFFSET);
+            entrypoint = read_data_slice_u32(&data, MTKLK_CODE_ENTRY_POINT_OFFSET);
+        }
 
         Self {
-            data_memory_load_address,
             data,
+            data_memory_load_address,
+            entrypoint,
         }
     }
 }
 
+#[derive(Debug, Clone)]
+struct LKRomSegmentized {
+    header_mapped_addr_range: Range<u64>,
+    header_file_backing: Range<u64>,
+    header_mapped_seg_flags: SegmentFlags,
+    data_mapped_addr_range: Range<u64>,
+    data_file_backing: Range<u64>,
+    data_mapped_seg_flags: SegmentFlags,
+}
+
+impl LKRomSegmentized {
+    pub fn get_header_mapped_addr_range(&self) -> Range<u64> {
+        self.header_mapped_addr_range.clone()
+    }
+    pub fn get_header_file_backing(&self) -> Range<u64> {
+        self.header_file_backing.clone()
+    }
+    pub fn get_header_mapped_seg_flags(&self) -> SegmentFlags {
+        self.header_mapped_seg_flags
+    }
+    pub fn get_data_mapped_addr_range(&self) -> Range<u64> {
+        self.data_mapped_addr_range.clone()
+    }
+    pub fn get_data_file_backing(&self) -> Range<u64> {
+        self.data_file_backing.clone()
+    }
+    pub fn get_data_mapped_seg_flags(&self) -> SegmentFlags {
+        self.data_mapped_seg_flags
+    }
+}
+
+#[derive(Debug, Clone)]
 struct LKRomSection {
     name_root: String,
     header: MtkLkHeader,
     data: LkRomData,
+    file_offset: u64,
 }
 
 impl LKRomSection {
     pub fn full_size(&self) -> u64 {
         self.header.get_full_size()
     }
+
+    pub fn get_section_start(&self) -> u64 {
+        self.file_offset
+    }
+    pub fn get_section_end(&self) -> u64 {
+        self.file_offset + self.full_size()
+    }
+
+    pub fn get_segmentized(&self) -> LKRomSegmentized {
+        let header_mapped_addr_range = Range {
+            start: *self.data.data_memory_load_address.as_ref().unwrap() as u64
+                - self.get_header_size(),
+            end: *self.data.data_memory_load_address.as_ref().unwrap() as u64,
+        };
+        let header_file_backing = Range {
+            start: self.file_offset,
+            end: self.get_header_size(),
+        };
+        let header_mapped_seg_flags = SegmentFlags::new()
+            .contains_code(false)
+            .contains_data(true)
+            .writable(false)
+            .readable(false);
+        let data_mapped_addr_range = Range {
+            start: *self.data.data_memory_load_address.as_ref().unwrap() as u64,
+            end: self.full_size(),
+        };
+        let data_file_backing = Range {
+            start: self.file_offset + self.get_header_size(),
+            end: self.header.get_full_size(),
+        };
+        let data_mapped_seg_flags = SegmentFlags::new()
+            .contains_code(true)
+            .contains_data(true)
+            .readable(true)
+            .writable(true)
+            .executable(true);
+        LKRomSegmentized {
+            header_mapped_addr_range,
+            header_file_backing,
+            header_mapped_seg_flags,
+            data_mapped_addr_range,
+            data_file_backing,
+            data_mapped_seg_flags,
+        }
+    }
+
+    pub fn get_header_size(&self) -> u64 {
+        self.header.size() as u64
+    }
 }
 
 pub(crate) struct MTKLkLoader {
     lk_sections: HashMap<String, LKRomSection>,
+}
+
+impl fmt::Display for MTKLkLoader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut s = String::new();
+        for seg in &self.lk_sections {
+            s.push_str(format!("{}\n", seg.0).as_str());
+        }
+        write!(f, "{}", s)
+    }
 }
 
 impl MTKLkLoader {
@@ -56,17 +163,21 @@ impl MTKLkLoader {
         let mut lk_sections = HashMap::<String, LKRomSection>::new();
 
         loop {
-            let Some(loaded_lk_header) = MtkLkHeader::load(&data[data_curr_i..]) else {
+            let Some(loaded_lk_header) = MtkLkHeader::load(&data[data_curr_i..], false) else {
                 break;
             };
             let name_root = loaded_lk_header.get_name_root();
             let full_size = loaded_lk_header.get_full_size();
-            let loaded_lk_data = LkRomData::new(data);
+            let lk_code = loaded_lk_header.is_lk_code();
+            let lk_header_size = loaded_lk_header.size() as usize;
+            let loaded_lk_data = LkRomData::new(&data[data_curr_i + lk_header_size..], lk_code);
+            debug!("Loaded LK Data: {:#X?}", loaded_lk_data);
 
             let loaded_lk_segment = LKRomSection {
                 name_root: loaded_lk_header.get_name_root(),
                 header: loaded_lk_header,
                 data: loaded_lk_data,
+                file_offset: data_curr_i as u64,
             };
 
             lk_sections.insert(name_root, loaded_lk_segment);
@@ -84,7 +195,11 @@ impl MTKLkLoader {
         }
 
         //
-        todo!()
+        Ok(Self { lk_sections })
+    }
+
+    pub fn get_sections(&self) -> HashMap<String, LKRomSection> {
+        self.lk_sections.clone()
     }
 }
 

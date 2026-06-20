@@ -6,7 +6,7 @@ use binaryninja::{
 };
 use tracing::{debug, error, info};
 
-use crate::mtk_loaders::lk::LkMd1RomHookContext;
+//use crate::mtk_loaders::lk::LkMd1RomHookContext;
 
 mod mtk_loaders;
 mod mtk_settings;
@@ -55,19 +55,19 @@ pub extern "C" fn CorePluginInit() -> bool {
         mtk_loaders::preloader::view::MTKPreloaderBinaryViewType::new,
     );
 
-    /*
-        register_view_type(
-            "mtkview_lk",
-            "MTK Little Kernel",
-            mtk_loaders::lk::view::MTKLkBinaryViewType::new,
-        );
-    */
+    register_view_type(
+        "mtkview_lk",
+        "MTK Little Kernel",
+        mtk_loaders::lk::view::MTKLkBinaryViewType::new,
+    );
 
+    /*
     let md1rom_hook = LkMd1RomHookContext::new(0, 0);
     register_binary_view_event(
         BinaryViewEventType::BinaryViewInitialAnalysisCompletionEvent,
         md1rom_hook,
     );
+    */
 
     register_command(
         "mtkview\\Print Load Information",
