@@ -60,26 +60,27 @@ impl MtkLkHeader {
 
         let lk_code = if !force_lk {
             if let Ok(s) = str::from_utf8(&name) {
-                println!("Got MD name header: {}", s);
-                match s.starts_with("lk") {
+                debug!("Got MD name header: {}", s);
+                let tmp_s = s.trim_end_matches('\0');
+                match tmp_s.starts_with("lk") && tmp_s.len() == 2 {
                     true => {
-                        println!("Setting lk_code to 'true'");
+                        debug!("Setting lk_code to 'true'");
                         true
                     }
                     false => {
-                        println!("Setting lk_code to 'false'");
+                        debug!("Setting lk_code to 'false'");
                         false
                     }
                 }
             } else {
-                println!("str parse failure - Setting lk_code to 'false'");
+                debug!("str parse failure - Setting lk_code to 'false'");
                 false
             }
         } else {
             force_lk
         };
 
-        println!("lk_code = {}", lk_code);
+        debug!("lk_code = {}", lk_code);
 
         offset += 0x20;
         let loadaddr = read_data_slice_u32(data, offset).unwrap();
@@ -114,7 +115,7 @@ impl MtkLkHeader {
     }
 
     pub fn get_full_size(&self) -> u64 {
-        self.size as u64
+        self.size as u64 + self.header_size() as u64
     }
 
     pub fn is_md_ext(&self) -> bool {
@@ -125,17 +126,23 @@ impl MtkLkHeader {
         self.lk_code
     }
 
-    pub fn size(&self) -> u32 {
-        if self.md1_ext.is_some() {
-            self.md1_ext.as_ref().unwrap().offset
-        } else {
-            0x200 // Default /shrug
-        }
+    pub fn data_size(&self) -> u32 {
+        self.size
+    }
+
+    pub fn header_size(&self) -> u32 {
+        self.md1_ext
+            .as_ref()
+            .unwrap_or(&MdHeaderExt {
+                magic2: 0,
+                offset: 0x200,
+            })
+            .offset
     }
 
     pub fn get_name_root(&self) -> String {
         if let Ok(s) = String::from_utf8(self.name.to_vec()) {
-            println!("String: {} has length: {}", s, s.len());
+            debug!("String: {} has length: {}", s, s.len());
             return s.trim_end_matches('\0').to_string();
         }
         let mut hs = String::from("seg_");

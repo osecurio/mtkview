@@ -1,12 +1,7 @@
 use std::{collections::HashMap, fmt, ops::Range};
 
-use binaryninja::{
-    binary_view::{BinaryViewEventHandler, BinaryViewExt},
-    data_buffer::DataBuffer,
-    section::SectionBuilder,
-    segment::SegmentFlags,
-};
-use tracing::{debug, info, warn};
+use binaryninja::segment::SegmentFlags;
+use tracing::debug;
 
 use crate::{
     BinaryViewResult,
@@ -47,7 +42,7 @@ impl LkRomData {
 }
 
 #[derive(Debug, Clone)]
-struct LKRomSegmentized {
+pub(crate) struct LKRomSegmentized {
     header_mapped_addr_range: Range<u64>,
     header_file_backing: Range<u64>,
     header_mapped_seg_flags: SegmentFlags,
@@ -78,7 +73,7 @@ impl LKRomSegmentized {
 }
 
 #[derive(Debug, Clone)]
-struct LKRomSection {
+pub(crate) struct LKRomSection {
     name_root: String,
     header: MtkLkHeader,
     data: LkRomData,
@@ -97,6 +92,14 @@ impl LKRomSection {
         self.file_offset + self.full_size()
     }
 
+    pub fn get_header_size(&self) -> u64 {
+        self.header.header_size() as u64
+    }
+
+    pub fn is_lk(&self) -> bool {
+        self.header.is_lk_code()
+    }
+
     pub fn get_segmentized(&self) -> LKRomSegmentized {
         let header_mapped_addr_range = Range {
             start: *self.data.data_memory_load_address.as_ref().unwrap() as u64
@@ -109,16 +112,17 @@ impl LKRomSection {
         };
         let header_mapped_seg_flags = SegmentFlags::new()
             .contains_code(false)
-            .contains_data(true)
+            .contains_data(false)
             .writable(false)
             .readable(false);
         let data_mapped_addr_range = Range {
             start: *self.data.data_memory_load_address.as_ref().unwrap() as u64,
-            end: self.full_size(),
+            end: *self.data.data_memory_load_address.as_ref().unwrap() as u64
+                + self.header.data_size() as u64,
         };
         let data_file_backing = Range {
             start: self.file_offset + self.get_header_size(),
-            end: self.header.get_full_size(),
+            end: self.file_offset + self.header.get_full_size(),
         };
         let data_mapped_seg_flags = SegmentFlags::new()
             .contains_code(true)
@@ -134,10 +138,6 @@ impl LKRomSection {
             data_file_backing,
             data_mapped_seg_flags,
         }
-    }
-
-    pub fn get_header_size(&self) -> u64 {
-        self.header.size() as u64
     }
 }
 
@@ -164,14 +164,15 @@ impl MTKLkLoader {
 
         loop {
             let Some(loaded_lk_header) = MtkLkHeader::load(&data[data_curr_i..], false) else {
+                debug!("No MTK LK Header found.. breaking.");
                 break;
             };
             let name_root = loaded_lk_header.get_name_root();
             let full_size = loaded_lk_header.get_full_size();
             let lk_code = loaded_lk_header.is_lk_code();
-            let lk_header_size = loaded_lk_header.size() as usize;
+            let lk_header_size = loaded_lk_header.header_size() as usize;
             let loaded_lk_data = LkRomData::new(&data[data_curr_i + lk_header_size..], lk_code);
-            debug!("Loaded LK Data: {:#X?}", loaded_lk_data);
+            //debug!("Loaded LK Data: {:#X?}", loaded_lk_data);
 
             let loaded_lk_segment = LKRomSection {
                 name_root: loaded_lk_header.get_name_root(),
@@ -182,7 +183,11 @@ impl MTKLkLoader {
 
             lk_sections.insert(name_root, loaded_lk_segment);
             if (full_size as usize + data_curr_i) as usize == data_full_len {
-                // Loaded all LK's
+                // Loaded all LKs
+                debug!(
+                    "Loaded all LKs: {} == data_full_len",
+                    (full_size as usize + data_curr_i)
+                );
                 break;
             } else {
                 data_curr_i += full_size as usize;
@@ -191,10 +196,11 @@ impl MTKLkLoader {
 
         if data_curr_i == 0 {
             // Found no LK magic
+            debug!("Load failure: data_curr_i == 0");
             return Err(());
         }
 
-        //
+        debug!("Got {} LK sections", lk_sections.len());
         Ok(Self { lk_sections })
     }
 
@@ -210,7 +216,7 @@ mod tests {
     #[test]
     fn test_mtk_lk_loader() {
         let f = include_bytes!("../../../testbins/lk.img");
-        let lk = MTKLkLoader::new(f).unwrap();
+        let _ = MTKLkLoader::new(f).unwrap();
     }
 }
 

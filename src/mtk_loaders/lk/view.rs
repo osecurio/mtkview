@@ -1,25 +1,18 @@
 use crate::mtk_loaders::lk::MTKLkLoader;
 use crate::mtk_loaders::lk::lk_types::LK_TYPES_C_SRC;
-use crate::{
-    BinaryViewResult,
-    mtk_loaders::lk::lk_headers::{MTKLK_HEADER_DEFAULT_LEN, MTKLK_MAGIC, MtkLkHeader},
-};
-use base64::prelude::*;
+use crate::{BinaryViewResult, mtk_loaders::lk::lk_headers::MtkLkHeader};
 use binaryninja::{
     architecture::CoreArchitecture,
     binary_view::{BinaryView, BinaryViewBase, BinaryViewExt},
     custom_binary_view::{
         BinaryViewType, BinaryViewTypeBase, CustomBinaryView, CustomBinaryViewType,
     },
-    data_buffer::DataBuffer,
     platform::Platform,
     section::Section,
     segment::Segment,
-    symbol::{Symbol, SymbolType},
     types::{CoreTypeParser, TypeParser},
 };
-use std::ops::Range;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 pub struct MTKLkBinaryViewType {
     view_type: BinaryViewType,
@@ -117,7 +110,7 @@ impl MTKLkBinaryView {
         let default_platform = Platform::by_name("thumb2").ok_or(())?;
         let plat_type_container = default_platform.type_container();
         let type_parser = CoreTypeParser::default();
-        let parsed_types = type_parser
+        let _parsed_types = type_parser
             .parse_types_from_source(
                 LK_TYPES_C_SRC,
                 "lk_types.h",
@@ -134,6 +127,9 @@ impl MTKLkBinaryView {
         info!("{}", self.mtk_lk_loader);
 
         for (name, section) in self.mtk_lk_loader.get_sections() {
+            if !section.is_lk() {
+                continue;
+            }
             let segmentized = section.get_segmentized();
             let header_new_segment = Segment::builder(segmentized.get_header_mapped_addr_range())
                 .parent_backing(segmentized.get_header_file_backing())
@@ -156,7 +152,7 @@ impl MTKLkBinaryView {
             .is_auto(true);
             new_header_section =
                 new_header_section.semantics(binaryninja::section::Semantics::ReadOnlyData);
-            println!("Attempting to create section: {:?}", new_header_section);
+            println!("Attempting to create section: {:#X?}", new_header_section);
             self.add_section(new_header_section);
 
             let mut new_data_section = Section::builder(
