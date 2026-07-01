@@ -1,6 +1,8 @@
 use crate::mtk_loaders::lk::MTKLkLoader;
-use crate::mtk_loaders::lk::lk_types::LK_TYPES_C_SRC;
+use crate::mtk_loaders::lk::lk_types::{LK_TYPES_LK_HEADER, LkCPlatformTypes};
 use crate::{BinaryViewResult, mtk_loaders::lk::lk_headers::MtkLkHeader};
+use binaryninja::symbol::Symbol;
+use binaryninja::symbol::SymbolType;
 use binaryninja::{
     architecture::CoreArchitecture,
     binary_view::{BinaryView, BinaryViewBase, BinaryViewExt},
@@ -79,7 +81,7 @@ pub struct MTKLkBinaryView {
 
 impl BinaryViewBase for MTKLkBinaryView {
     fn address_size(&self) -> usize {
-        4
+        self.get_mtk_address_size()
     }
 
     fn default_endianness(&self) -> binaryninja::Endianness {
@@ -106,13 +108,21 @@ impl MTKLkBinaryView {
 
     fn init(&self) -> BinaryViewResult<()> {
         debug!("INIT");
-        let default_arch = CoreArchitecture::by_name("armv7").ok_or(())?;
-        let default_platform = Platform::by_name("thumb2").ok_or(())?;
+
+        let (def_arch, def_plat) = {
+            match self.get_mtk_address_size() {
+                4 => ("armv7", "armv7"),
+                8 => ("aarch64", "aarch64"),
+                _ => return Err(()),
+            }
+        };
+        let default_arch = CoreArchitecture::by_name(def_arch).ok_or(())?;
+        let default_platform = Platform::by_name(def_plat).ok_or(())?;
         let plat_type_container = default_platform.type_container();
         let type_parser = CoreTypeParser::default();
-        let _parsed_types = type_parser
+        let parsed_types = type_parser
             .parse_types_from_source(
-                LK_TYPES_C_SRC,
+                LK_TYPES_LK_HEADER,
                 "lk_types.h",
                 &default_platform,
                 &plat_type_container,
@@ -125,7 +135,6 @@ impl MTKLkBinaryView {
         self.set_default_platform(&default_platform);
 
         info!("{}", self.mtk_lk_loader);
-
         for (name, section) in self.mtk_lk_loader.get_sections() {
             if !section.is_lk() {
                 continue;
@@ -168,9 +177,8 @@ impl MTKLkBinaryView {
             self.add_section(new_data_section);
         }
 
-        /*
         // Setup Entry Point
-        let entry_forced_platform = Platform::by_name("armv7").ok_or(())?;
+        let entry_forced_platform = Platform::by_name(def_plat).ok_or(())?;
         let entry_point = self.get_entry_point();
         let start_symbol = Symbol::builder(SymbolType::Function, "_start", entry_point)
             .full_name("_start")
@@ -180,45 +188,23 @@ impl MTKLkBinaryView {
         self.define_user_symbol(&start_symbol);
 
         // Define User Header Types (MOVE THIS CODE INTO THE SPECIFIC MTK HEADER PARSERS)
-        let pt_clone = parsed_types.types.clone();
-        for pt in parsed_types.types {
-            let Some(type_offset) = self.mtk_lk_loader.get_type_addr(&pt.name.to_string()) else {
-                continue;
-            };
+        let plat_types = LkCPlatformTypes::new(def_plat);
 
-            // Define GFH COMMON for each header... needs refactor?
-            let name = pt.name.to_string();
-            self.define_user_type(
-                "gfh_common_header",
-                &pt_clone
-                    .iter()
-                    .find(|p| p.name == "gfh_common_header".into())
-                    .unwrap()
-                    .ty,
-            );
-            let sym = Symbol::builder(
-                SymbolType::Data,
-                &name,
-                self.mtk_lk_loader.get_image_load_addr() as u64 + type_offset as u64,
-            )
-            .create();
-            self.define_auto_symbol_with_type(&sym, &entry_forced_platform, Some(&*pt.ty))
-                .unwrap();
+        let lk_hdr_type = plat_types.get_type_by_name("lk_hdr_32").unwrap();
 
-            // Define actual type header
-            let name = pt.name.to_string();
-            self.define_user_type(name.clone(), &pt.ty);
-            let sym = Symbol::builder(
-                SymbolType::Data,
-                &name,
-                self.mtk_lk_loader.get_image_load_addr() as u64 + type_offset as u64,
-            )
-            .create();
-
-            self.define_auto_symbol_with_type(&sym, &entry_forced_platform, Some(&*pt.ty))
-                .unwrap();
-        }*/
-
+        let name = lk_hdr_type.name.to_string();
+        self.define_user_type("lk_hdr_32", &lk_hdr_type.ty);
+        let sym = Symbol::builder(
+            SymbolType::Data,
+            &name,
+            self.section_by_name("lk_header")
+                .unwrap()
+                .address_range()
+                .start,
+        )
+        .create();
+        self.define_auto_symbol_with_type(&sym, &entry_forced_platform, Some(&*lk_hdr_type.ty))
+            .unwrap();
         Ok(())
     }
 
@@ -259,8 +245,14 @@ impl MTKLkBinaryView {
     */
 
     fn get_entry_point(&self) -> u64 {
-        0 //self.mtk_lk_loader.get_entry_point()
+        self.mtk_lk_loader.get_entry_point("lk")
     }
+
+    fn get_mtk_address_size(&self) -> usize {
+        self.mtk_lk_loader.get_address_size()
+    }
+
+    //fn get_header_base_addr(&self) -> u64 {}
 }
 
 impl AsRef<BinaryView> for MTKLkBinaryView {

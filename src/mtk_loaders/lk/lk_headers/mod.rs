@@ -19,6 +19,13 @@ pub const MTKLK_CODE_ENTRY_POINT_OFFSET: usize = 0x7c;
 pub struct MdHeaderExt {
     magic2: u32,
     offset: u32,
+    hdr_version: u32,
+    image_type: u32,
+    image_list_end: u32,
+    alignment: u32,
+    _dsize_extend: u32,
+    _maddr_extend: u32,
+    _padding: [u8; 0x1b0],
 }
 
 #[derive(Debug, Clone)]
@@ -89,19 +96,50 @@ impl MtkLkHeader {
         offset += size_of::<u32>();
 
         let m2 = read_data_slice_u32(data, offset).unwrap();
-        let md1_ext = if m2 == MTKLK_MAGIC2_INT {
-            info!("Magic2 Found @ 0x{:X}", offset);
-            offset += size_of::<u32>();
-            let data_offset = read_data_slice_u32(data, offset).unwrap();
-
-            Some(MdHeaderExt {
-                magic2: m2,
-                offset: data_offset,
-            })
-        } else {
+        if m2 != MTKLK_MAGIC2_INT {
             info!("Magic2 NOT Found @ 0x{:X}", offset);
             return None;
-        };
+        }
+
+        info!("Magic2 Found @ 0x{:X}", offset);
+        offset += size_of::<u32>();
+        let data_offset = read_data_slice_u32(data, offset).unwrap();
+
+        offset += size_of::<u32>();
+        let hdr_version = read_data_slice_u32(data, offset).unwrap();
+
+        offset += size_of::<u32>();
+        let image_type = read_data_slice_u32(data, offset).unwrap();
+
+        offset += size_of::<u32>();
+        let image_list_end = read_data_slice_u32(data, offset).unwrap();
+
+        offset += size_of::<u32>();
+        let alignment = read_data_slice_u32(data, offset).unwrap();
+
+        offset += size_of::<u32>();
+        let _dsize_extend = read_data_slice_u32(data, offset).unwrap();
+
+        offset += size_of::<u32>();
+        let _maddr_extend = read_data_slice_u32(data, offset).unwrap();
+
+        offset += size_of::<u32>();
+        let _padding = *read_data_slice_n(data, offset, 0x1b0)
+            .unwrap()
+            .as_array()
+            .unwrap();
+
+        let md1_ext = Some(MdHeaderExt {
+            magic2: m2,
+            offset: data_offset,
+            hdr_version,
+            image_type,
+            image_list_end,
+            alignment,
+            _dsize_extend,
+            _maddr_extend,
+            _padding,
+        });
 
         Some(Self {
             magic,
@@ -118,10 +156,6 @@ impl MtkLkHeader {
         self.size as u64 + self.header_size() as u64
     }
 
-    pub fn is_md_ext(&self) -> bool {
-        self.md1_ext.is_some()
-    }
-
     pub fn is_lk_code(&self) -> bool {
         self.lk_code
     }
@@ -131,13 +165,7 @@ impl MtkLkHeader {
     }
 
     pub fn header_size(&self) -> u32 {
-        self.md1_ext
-            .as_ref()
-            .unwrap_or(&MdHeaderExt {
-                magic2: 0,
-                offset: 0x200,
-            })
-            .offset
+        self.md1_ext.as_ref().unwrap().offset
     }
 
     pub fn get_name_root(&self) -> String {

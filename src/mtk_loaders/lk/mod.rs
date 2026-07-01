@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt, ops::Range};
 
-use binaryninja::segment::SegmentFlags;
+use binaryninja::{section, segment::SegmentFlags};
 use tracing::debug;
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
     mtk_loaders::lk::lk_headers::{
         MTKLK_CODE_ENTRY_POINT_OFFSET, MTKLK_CODE_LOAD_ADDR_OFFSET, MtkLkHeader,
     },
-    util::read_data_slice_u32,
+    util::{find_magic_first, read_data_slice_u32, read_data_slice_u64},
 };
 
 pub(crate) mod lk_headers;
@@ -18,8 +18,8 @@ pub(crate) mod view;
 #[derive(Debug, Clone)]
 struct LkRomData {
     data: Vec<u8>,
-    data_memory_load_address: Option<u32>,
-    entrypoint: Option<u32>,
+    data_memory_load_address: Option<u64>,
+    entrypoint: Option<u64>,
 }
 
 impl LkRomData {
@@ -29,8 +29,15 @@ impl LkRomData {
         let mut entrypoint = None;
 
         if lk_code {
-            data_memory_load_address = read_data_slice_u32(&data, MTKLK_CODE_LOAD_ADDR_OFFSET);
-            entrypoint = read_data_slice_u32(&data, MTKLK_CODE_ENTRY_POINT_OFFSET);
+            if let Some(bits_64_base_addr) = get_aarch64_base_addr(&data) {
+                data_memory_load_address = Some(bits_64_base_addr);
+                entrypoint = Some(bits_64_base_addr);
+            } else {
+                data_memory_load_address =
+                    Some(read_data_slice_u32(&data, MTKLK_CODE_LOAD_ADDR_OFFSET).unwrap() as u64);
+                entrypoint =
+                    Some(read_data_slice_u32(&data, MTKLK_CODE_ENTRY_POINT_OFFSET).unwrap() as u64);
+            }
         }
 
         Self {
@@ -39,6 +46,21 @@ impl LkRomData {
             entrypoint,
         }
     }
+}
+
+fn get_aarch64_base_addr(data: &[u8]) -> Option<u64> {
+    // Find the following integers in a row
+    // 000004f0  int64_t data_4f0 = 0x60000000000400
+    // 000004f8  int64_t data_4f8 = 0x60000000000404
+    // 00000500  int64_t data_500 = 0x60000000000708
+    // "\x00\x04\x00\x00\x00\x00\x60\x00\x04\x04\x00\x00\x00\x00\x60\x00\x08\x07\x00\x00\x00\x00\x60\x00"
+    // The 64 bit integer after it should have a 0 mask of 0x5
+    // 0xffff000050700000 & 0xfffff == 0x0
+    //
+    let Some(sig_offset) = find_magic_first(data, b"\x00\x04\x00\x00\x00\x00\x60\x00\x04\x04\x00\x00\x00\x00\x60\x00\x08\x07\x00\x00\x00\x00\x60\x00") else {
+        return None;
+    };
+    read_data_slice_u64(data, sig_offset + (0x3 * size_of::<u64>()))
 }
 
 #[derive(Debug, Clone)]
@@ -206,6 +228,18 @@ impl MTKLkLoader {
 
     pub fn get_sections(&self) -> HashMap<String, LKRomSection> {
         self.lk_sections.clone()
+    }
+
+    pub fn get_address_size(&self) -> usize {
+        if self.lk_sections.keys().any(|s| s.starts_with("bl2_ext")) {
+            8
+        } else {
+            4
+        }
+    }
+    pub fn get_entry_point(&self, section_name: &str) -> u64 {
+        let s = self.lk_sections.get(section_name).unwrap();
+        s.data.entrypoint.unwrap_or(0)
     }
 }
 

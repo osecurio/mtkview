@@ -3,7 +3,7 @@ use binaryninja::{
     types::{CoreTypeParser, ParsedType, TypeParser, TypeParserResult},
 };
 
-pub(crate) const LK_TYPES_C_SRC: &'static str = r#"
+pub(crate) const LK_TYPES_C_SRC_UBOOT: &'static str = r#"
 /* LK image header */
 
 union lk_hdr {
@@ -21,6 +21,33 @@ union lk_hdr {
 #define LK_PART_MAGIC		0x58881688
 "#;
 
+pub(crate) const LK_TYPES_LK_HEADER: &'static str = r#"
+
+typedef struct ImageType {
+    uint8_t _id;
+    uint8_t reserved0;
+    uint8_t reserved1;
+    uint8_t _group;
+} ImageType_t;
+
+struct lk_hdr_32 {
+    uint32_t magic;
+    uint32_t _dsize;
+    char _cname[0x20];
+    uint32_t _maddr;
+    uint32_t mode;
+    uint32_t ext_magic;
+    uint32_t hdr_size;
+    uint32_t hdr_version;
+    ImageType_t image_type;
+    uint32_t image_list_end;
+    uint32_t alignment;
+    uint32_t _dsize_extend;
+    uint32_t _maddr_extend;
+    char _padding[0x1b0];
+};
+"#;
+
 pub struct LkCPlatformTypes {
     parsed_types: TypeParserResult,
 }
@@ -32,7 +59,7 @@ impl LkCPlatformTypes {
         let type_parser = CoreTypeParser::default();
         let parsed_types = type_parser
             .parse_types_from_source(
-                LK_TYPES_C_SRC,
+                LK_TYPES_LK_HEADER,
                 "lk_types.h",
                 &platform,
                 &plat_type_container,
