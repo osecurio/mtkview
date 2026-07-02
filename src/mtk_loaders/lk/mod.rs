@@ -4,7 +4,6 @@ use binaryninja::segment::SegmentFlags;
 use tracing::debug;
 
 use crate::{
-    BinaryViewResult,
     mtk_loaders::lk::lk_headers::{
         MTKLK_CODE_ENTRY_POINT_OFFSET, MTKLK_CODE_LOAD_ADDR_OFFSET, MtkLkHeader,
     },
@@ -167,7 +166,7 @@ impl fmt::Display for MTKLkLoader {
 }
 
 impl MTKLkLoader {
-    pub fn new(data: &[u8]) -> BinaryViewResult<Self> {
+    pub fn new(data: &[u8]) -> Result<Self, ()> {
         let data_full_len = data.len();
         let mut data_curr_i = 0;
 

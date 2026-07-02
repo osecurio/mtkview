@@ -4,7 +4,6 @@ use binaryninja::{data_buffer::DataBuffer, segment::SegmentFlags};
 use tracing::{debug, error};
 
 use crate::{
-    BinaryViewResult,
     mtk_loaders::preloader::gfh_headers::{GfhHeader, MtkGfhHeader},
     util::find_magic_first,
 };
@@ -135,7 +134,7 @@ pub struct MTKPreloaderLoader {
 }
 
 impl MTKPreloaderLoader {
-    pub fn new(data: DataBuffer) -> BinaryViewResult<Self> {
+    pub fn new(data: DataBuffer) -> Result<Self, ()> {
         let mut image_data = data.get_data().to_vec();
         let offset = if let Some(offset) = find_magic_first(&image_data, MTKPL_MAGIC) {
             offset
