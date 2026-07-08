@@ -95,7 +95,7 @@ impl CustomBinaryView for MTKLkBinaryView {
             )
             .is_auto(true);
             new_data_section =
-                new_data_section.semantics(binaryninja::section::Semantics::DefaultSection);
+                new_data_section.semantics(binaryninja::section::Semantics::ReadOnlyCode);
 
             println!("Attempting to create section: {:?}", new_data_section);
 
