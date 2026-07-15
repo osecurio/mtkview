@@ -195,42 +195,6 @@ impl MTKLkBinaryView {
         Ok(())
     }
 
-    /*
-    fn define_mtkpl_header(&self) -> binaryninja::rc::Ref<binaryninja::types::Type> {
-        let magic = Type::named_int(4, false, "magic");
-        let unk0 = Type::array(&Type::char(), 0x18);
-        let unk0 = Type::named_type_from_type("unk0", &unk0);
-        let load_addr = Type::named_int(4, false, "load_addr");
-        let size = Type::named_int(4, false, "size");
-        let unk1 = Type::array(&Type::char(), 0x4);
-        let unk1 = Type::named_type_from_type("unk1", &unk1);
-        let entry_offset = Type::named_int(4, false, "entry_offset");
-        let emi_data_len = Type::named_int(4, false, "emi_data_len");
-        let struct_outline = [
-            ("magic", magic),
-            ("unk0", unk0),
-            ("load_addr", load_addr),
-            ("size", size),
-            ("unk1", unk1),
-            ("entry_offset", entry_offset),
-            ("emi_data_len", emi_data_len),
-        ];
-
-        let mut mtkpl_header_struct = StructureBuilder::new();
-
-        for struct_member in struct_outline {
-            mtkpl_header_struct.append(
-                &struct_member.1,
-                struct_member.0,
-                MemberAccess::PublicAccess,
-                MemberScope::NoScope,
-            );
-        }
-
-        Type::structure(&mtkpl_header_struct.finalize())
-    }
-    */
-
     fn get_entry_point(&self) -> u64 {
         self.mtk_lk_loader.get_entry_point("lk")
     }
@@ -238,8 +202,6 @@ impl MTKLkBinaryView {
     fn get_mtk_address_size(&self) -> usize {
         self.mtk_lk_loader.get_address_size()
     }
-
-    //fn get_header_base_addr(&self) -> u64 {}
 }
 
 impl AsRef<BinaryView> for MTKLkBinaryView {
