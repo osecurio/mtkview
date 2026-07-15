@@ -35,6 +35,22 @@ pub fn find_magic_first(data: &[u8], pat: &[u8]) -> Option<usize> {
     data.windows(pat.len()).position(|w| w == pat)
 }
 
+pub fn find_magic_all(data: &[u8], pat: &[u8]) -> Option<Vec<u64>> {
+    let mut magics = vec![];
+    let mut curr_offs = 0;
+    loop {
+        let Some(add_offs) = find_magic_first(&data[curr_offs..], pat) else {
+            if magics.is_empty() {
+                return None;
+            }
+            return Some(magics);
+        };
+        curr_offs += add_offs + pat.len();
+        //println!("Curr offs: 0x{:x}", curr_offs);
+        magics.push(add_offs as u64);
+    }
+}
+
 pub fn find_aligned_magic(data: &[u8], pat: &[u8]) -> Option<usize> {
     let chunk_index = data.chunks(pat.len()).position(|c| c == pat)?;
     Some(chunk_index * pat.len())

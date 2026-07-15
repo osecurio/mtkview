@@ -16,7 +16,7 @@
     "Windows": "Clone from Github, compile, place dynamic library in the binary ninja plugins directory."
   },
   "dependencies": null,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "author": "osecurio",
-  "minimumbinaryninjaversion": 9757
+  "minimumbinaryninjaversion": 10088
 }

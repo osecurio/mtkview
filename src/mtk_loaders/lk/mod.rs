@@ -12,6 +12,7 @@ use crate::{
 
 pub(crate) mod lk_headers;
 pub(crate) mod lk_types;
+pub(crate) mod modules;
 pub(crate) mod view;
 
 #[derive(Debug, Clone)]

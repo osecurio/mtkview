@@ -8,6 +8,7 @@ use tracing::{debug, error, info};
 
 //use crate::mtk_loaders::lk::LkMd1RomHookContext;
 
+mod commands;
 mod mtk_loaders;
 mod mtk_settings;
 mod util;
@@ -39,22 +40,22 @@ impl Command for LoadCommand {
 #[unsafe(no_mangle)]
 pub extern "C" fn CorePluginInit() -> bool {
     binaryninja::tracing_init!("mtkview");
-    debug!("MTK view initializing..");
-
-    // Register Settings Group
-    // Register Setting JSON
-    //let settings = Settings::new();
-    //settings.register_group("mtkldr", "MTK Loader");
-    //settings.register_setting_json("mtkldr", )
+    debug!("MTKView Initializing..");
 
     register_binary_view_type(mtk_loaders::preloader::view::MTKPreloaderBinaryViewType);
 
     register_binary_view_type(mtk_loaders::lk::view::MTKLkBinaryViewType);
 
     register_command(
-        "mtkview\\Print Load Information",
+        "mtkview\\Print Preloader Load Information",
         "Prints load information for the current file.",
         LoadCommand,
+    );
+
+    register_command(
+        "mtkview\\Fastboot Heuristics",
+        "Run Fastboot Heuristics",
+        commands::FastbootHeuristicCommand,
     );
 
     debug!("MTK view initialized.");
