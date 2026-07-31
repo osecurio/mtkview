@@ -8,7 +8,6 @@ use crate::mtk_loaders::lk::modules::fastboot::types::get_fastboot_types;
 use crate::util::find_magic_all;
 use binaryninja::binary_view::search::SearchQuery;
 use binaryninja::rc::Ref;
-use binaryninja::string::IntoCStr;
 use binaryninja::symbol::Symbol;
 use binaryninja::symbol::SymbolType;
 use binaryninja::{
