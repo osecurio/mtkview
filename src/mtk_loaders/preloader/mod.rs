@@ -443,6 +443,17 @@ impl fmt::Display for MTKPreloaderLoader {
                 cds.file_backing.start, cds.file_backing.end
             );
         }
+
+        if let Some(emi) = self.segment_data.get(".emi.data") {
+            s = format!(
+                "{s}m .emi.data -> 0x{:X} - 0x{:X}\n",
+                emi.mapped_addr_range.start, emi.mapped_addr_range.end
+            );
+            s = format!(
+                "{s}f .emi.data -> 0x{:X} - 0x{:X}\n",
+                emi.file_backing.start, emi.file_backing.end
+            );
+        }
         write!(f, "{s}")
     }
 }
